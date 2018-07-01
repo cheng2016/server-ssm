@@ -1,5 +1,6 @@
 package com.cheng.server.socket.client;
 
+import com.cheng.server.entity.User;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
@@ -49,9 +50,9 @@ public class LoginSocketClient {
         Channel ch = bootstrap.connect(IP, PORT).sync().channel();
 
 
-        ch.writeAndFlush("客户端数据" + "\r\n");
+        ch.writeAndFlush("this is a message" + "\r\n");
 
-        logger.info("向Socket服务器发送数据:" + "客户端数据" + "\r\n");
+        logger.info("向Socket服务器发送数据:" + "this is a message" + "\r\n");
     }
 
     public static void main(String[] args) {

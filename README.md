@@ -17,9 +17,11 @@
 
   
 
-## [setting.xml](https://blog.csdn.net/wangfei0904306/article/details/56277534)
+## Other
 
-​    maven mirror 设置
+[setting.xml设置](https://blog.csdn.net/wangfei0904306/article/details/56277534)    
+
+maven mirror 设置
 
 ```
 <mirror>
@@ -65,3 +67,35 @@
     </mirror>
 
 ```
+
+
+
+
+## Contact
+
+QQ: 1102743530 ( 浮云游子意 )
+
+Email: mitnick.cheng@gmail.com
+
+Github: https://github.com/cheng2016
+
+
+
+# License
+
+```
+Copyright 2016 cheng2016,Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+

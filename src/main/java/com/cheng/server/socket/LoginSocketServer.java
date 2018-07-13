@@ -1,6 +1,7 @@
 package com.cheng.server.socket;
 
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
@@ -14,7 +15,6 @@ import io.netty.handler.codec.string.StringEncoder;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.stereotype.Component;
-import io.netty.channel.ChannelHandler.Sharable;
 
 @Sharable
 @Component

@@ -1,7 +1,7 @@
 package com.cheng.server.controller;
 
-import com.cheng.server.service.UserService;
 import com.cheng.server.entity.User;
+import com.cheng.server.service.UserService;
 import com.google.gson.Gson;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;

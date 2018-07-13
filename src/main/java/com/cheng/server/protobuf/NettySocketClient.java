@@ -15,8 +15,8 @@ import io.netty.handler.codec.protobuf.ProtobufVarint32LengthFieldPrepender;
  * <p>
  * Created by chengzj 2018/07/13
  */
-public class LoginSocketClient {
-    private final static String TAG = "LoginSocketClient";
+public class NettySocketClient {
+    private final static String TAG = "NettySocketClient";
     private static final String IP = "127.0.0.1";
 
     private static final int PORT = 2993;

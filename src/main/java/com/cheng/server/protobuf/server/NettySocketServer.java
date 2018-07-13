@@ -24,7 +24,7 @@ import io.netty.handler.logging.LoggingHandler;
  * Created by chengzj 2018/07/13
  */
 @Sharable
-public class LoginSocketServer {
+public class NettySocketServer {
     private static final String IP = "127.0.0.1";
     private static final int PORT = 2993;
 

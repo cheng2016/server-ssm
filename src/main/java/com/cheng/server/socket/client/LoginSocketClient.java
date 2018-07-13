@@ -1,6 +1,5 @@
 package com.cheng.server.socket.client;
 
-import com.cheng.server.entity.User;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;

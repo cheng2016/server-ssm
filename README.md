@@ -1,9 +1,21 @@
-# Server-ssm
+# server-ssm
 一个ssm的服务器框架。
 
 ###### [《从零开始搭建游戏服务器》Netty导入创建Socket服务器](https://www.cnblogs.com/xujian2014/p/5704316.html)
 
 
+
+## main fuction
+
+- 集成 Spring + SpringMvc + Mybatis 服务器框架
+
+- 使用 Netty 搭建 TCP 服务器
+
+- 使用 Protobuf 进行数据交互
+
+- 使用 Mybatis 自动生成插件
+
+  
 
 ## [setting.xml](https://blog.csdn.net/wangfei0904306/article/details/56277534)
 

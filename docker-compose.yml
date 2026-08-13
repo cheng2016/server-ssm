@@ -1,0 +1,59 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: game-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: game
+      MYSQL_USER: game
+      MYSQL_PASSWORD: game
+    ports:
+      - "3306:3306"
+    volumes:
+      - game-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: game-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  game-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: game-server
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: game
+      MYSQL_USER: game
+      MYSQL_PASSWORD: game
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: change-me-to-a-very-long-secret-key-32bytes!
+      OPS_TOKEN: dev-ops-token
+      GAME_TCP_PORT: 9000
+      GAME_WS_PORT: 9001
+    ports:
+      - "8080:8080"
+      - "9000:9000"
+      - "9001:9001"
+
+volumes:
+  game-mysql-data:

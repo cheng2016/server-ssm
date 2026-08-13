@@ -1,101 +1,132 @@
 # server-ssm
-一个ssm的服务器框架。
 
-###### [《从零开始搭建游戏服务器》Netty导入创建Socket服务器](https://www.cnblogs.com/xujian2014/p/5704316.html)
+Modern **game / realtime server starter**: Spring Boot 3 + Java 21 + Netty + Protobuf + MyBatis-Plus.
 
+Evolved from the classic SSM + Netty learning scaffold into a clean multi-module template you can run with Docker and extend with `@GameHandler` message routing.
 
+## Features
 
-## main fuction
+- HTTP API: register / login (JWT), user profile, ops (online / kick / broadcast)
+- Netty TCP (`9000`) + WebSocket (`9001/ws`) with one binary frame layout
+- Protobuf sample protocol: Login / Heartbeat / Chat
+- Spring-style `@GameHandler` dispatcher for game logic
+- MySQL + Flyway, Redis online-set, Actuator, OpenAPI (`/swagger-ui.html`)
+- Virtual threads for HTTP, Docker Compose, GitHub Actions CI
+- Maven Wrapper, Testcontainers e2e, browser WebSocket debug page
 
-- 集成 Spring + SpringMvc + Mybatis 服务器框架
+## Modules
 
-- 使用 Netty 搭建 TCP 服务器
-
-- 使用 Protobuf 进行数据交互
-
-- 使用 Mybatis 自动生成插件
-
-  
-
-## Other
-
-[setting.xml设置](https://blog.csdn.net/wangfei0904306/article/details/56277534)    
-
-maven mirror 设置
-
-```
-<mirror>
-        <id>alimaven</id>
-        <name>aliyun maven</name>
-        <url>http://maven.aliyun.com/nexus/content/groups/public/</url>
-        <mirrorOf>central</mirrorOf>
-    </mirror>
-
-    <mirror>
-        <id>central</id>
-        <name>Maven Repository Switchboard</name>
-        <url>http://repo1.maven.org/maven2/</url>
-        <mirrorOf>central</mirrorOf>
-    </mirror>
-
-    <mirror>
-        <id>repo2</id>
-        <mirrorOf>central</mirrorOf>
-        <name>Human Readable Name for this Mirror.</name>
-        <url>http://repo2.maven.org/maven2/</url>
-    </mirror>
-
-    <mirror>
-        <id>ibiblio</id>
-        <mirrorOf>central</mirrorOf>
-        <name>Human Readable Name for this Mirror.</name>
-        <url>http://mirrors.ibiblio.org/pub/mirrors/maven2/</url>
-    </mirror>
-
-    <mirror>
-        <id>jboss-public-repository-group</id>
-        <mirrorOf>central</mirrorOf>
-        <name>JBoss Public Repository Group</name>
-        <url>http://repository.jboss.org/nexus/content/groups/public</url>
-    </mirror>
-
-    <mirror>
-        <id>maven.net.cn</id>
-        <name>oneof the central mirrors in china</name>
-        <url>http://maven.net.cn/content/groups/public/</url>
-        <mirrorOf>central</mirrorOf>
-    </mirror>
-
+```text
+server-ssm/
+├── game-common        # ApiResponse, errors, MsgIds
+├── game-protocol      # .proto + generated Java
+├── game-persistence   # MyBatis-Plus entities/mappers + Flyway
+├── game-network       # Netty bootstrap, codec, SessionManager, dispatcher
+└── game-app           # Spring Boot app, REST, handlers
 ```
 
+## Quick start
 
+### 1) Infrastructure + server
 
-
-## Contact
-
-QQ: 1102743530 ( 浮云游子意 )
-
-Email: mitnick.cheng@gmail.com
-
-Github: https://github.com/cheng2016
-
-
-
-# License
-
-```
-Copyright 2016 cheng2016,Inc.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+```bash
+docker compose up -d --build
 ```
 
+- HTTP: http://localhost:8080
+- Debug page: http://localhost:8080/debug.html
+- Swagger: http://localhost:8080/swagger-ui.html
+- TCP: `localhost:9000`
+- WebSocket: `ws://localhost:9001/ws`
+
+### 2) Register & login
+
+```bash
+curl -s -X POST http://localhost:8080/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"secret1","nickname":"Alice"}'
+
+curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"secret1"}'
+```
+
+Use the returned `token` for HTTP `Authorization: Bearer <token>` and for TCP `LoginRequest.token`.
+
+### 3) Ops
+
+```bash
+curl -s http://localhost:8080/api/ops/online -H "X-Ops-Token: dev-ops-token"
+curl -s -X POST http://localhost:8080/api/ops/broadcast \
+  -H "X-Ops-Token: dev-ops-token" \
+  -H "Content-Type: application/json" \
+  -d '{"content":"hello everyone"}'
+```
+
+### Local Maven run
+
+Requirements: JDK 21+ (Maven via `./mvnw`), MySQL 8, Redis.
+
+```bash
+docker compose up -d mysql redis
+cp .env.example .env
+./mvnw -pl game-app -am spring-boot:run
+```
+
+Open http://localhost:8080/debug.html → Register/Login → Connect WS → Send Login/Chat.
+
+### Tests
+
+Needs Docker (Testcontainers MySQL + Redis):
+
+```bash
+./mvnw -B verify
+```
+
+## Binary protocol
+
+Frame:
+
+```text
+int32 length | int16 msgId | protobuf payload
+length = 2 + payload.length
+```
+
+| msgId | Name | Direction |
+|------:|------|-----------|
+| 1001 | LoginRequest | C→S |
+| 1002 | LoginResponse | S→C |
+| 1003 | HeartbeatRequest | C→S |
+| 1004 | HeartbeatResponse | S→C |
+| 1005 | ChatRequest | C→S |
+| 1006 | ChatMessage | S→C (broadcast) |
+
+Add handlers with:
+
+```java
+@GameMessageController
+public class MyHandlers {
+  @GameHandler(msgId = MsgIds.CHAT_REQ)
+  public GamePacket chat(ChannelHandlerContext ctx, byte[] payload) { ... }
+}
+```
+
+## Architecture
+
+```text
+Client ──Protobuf TCP──► Netty (game-network)
+Browser ──WebSocket────► Netty (same handlers)
+Admin ──REST───────────► Spring MVC (game-app)
+                              │
+                              ├─ SessionManager
+                              ├─ MySQL (users)
+                              └─ Redis (online set)
+```
+
+## Author
+
+Originally by [cheng2016](https://github.com/cheng2016) (Apache 2.0). Refactored into a modern game-server starter.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).

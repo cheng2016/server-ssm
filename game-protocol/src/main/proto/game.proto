@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+option java_package = "com.cheng.game.protocol";
+option java_outer_classname = "GameProtos";
+option java_multiple_files = true;
+
+message LoginRequest {
+  string token = 1;
+}
+
+message LoginResponse {
+  int32 code = 1;
+  string message = 2;
+  int64 player_id = 3;
+  string nickname = 4;
+}
+
+message HeartbeatRequest {
+  int64 client_time = 1;
+}
+
+message HeartbeatResponse {
+  int64 server_time = 1;
+}
+
+message ChatRequest {
+  string content = 1;
+}
+
+message ChatMessage {
+  int64 player_id = 1;
+  string nickname = 2;
+  string content = 3;
+  int64 timestamp = 4;
+}

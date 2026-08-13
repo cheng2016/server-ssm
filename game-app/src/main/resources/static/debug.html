@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Game Server WS Debug</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --text: #e7ecf3;
+      --muted: #8b9bb4;
+      --accent: #3d9cf0;
+      --ok: #3ecf8e;
+      --err: #f07178;
+      --line: #2a3649;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: radial-gradient(1200px 600px at 10% -10%, #1b2a44, var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 28px 16px 48px;
+    }
+    h1 { font-size: 1.4rem; margin: 0 0 6px; }
+    .sub { color: var(--muted); margin-bottom: 20px; font-size: 0.92rem; }
+    .panel {
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+    input, textarea, button {
+      font: inherit;
+    }
+    input, textarea {
+      width: 100%;
+      background: #0d121a;
+      border: 1px solid var(--line);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 9px 11px;
+      margin-bottom: 10px;
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 14px;
+      cursor: pointer;
+      background: var(--accent);
+      color: #041018;
+      font-weight: 600;
+    }
+    button.secondary { background: #30415c; color: var(--text); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #log {
+      height: 320px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.85rem;
+      line-height: 1.45;
+      background: #0b1017;
+      border-radius: 8px;
+      padding: 12px;
+      border: 1px solid var(--line);
+    }
+    .ok { color: var(--ok); }
+    .err { color: var(--err); }
+    .meta { color: var(--muted); }
+    @media (max-width: 640px) {
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Game Server WebSocket Debug</h1>
+  <p class="sub">Register/login via HTTP, then Login / Heartbeat / Chat over binary WebSocket frames.</p>
+
+  <section class="panel">
+    <div class="row">
+      <div>
+        <label>HTTP base</label>
+        <input id="httpBase" value="" />
+      </div>
+      <div>
+        <label>WebSocket URL</label>
+        <input id="wsUrl" value="" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Username</label>
+        <input id="username" value="alice" />
+      </div>
+      <div>
+        <label>Password</label>
+        <input id="password" type="password" value="secret1" />
+      </div>
+    </div>
+    <label>JWT token</label>
+    <textarea id="token" rows="3" placeholder="Paste token or use Register / Login"></textarea>
+    <div class="actions">
+      <button id="btnRegister" type="button">Register</button>
+      <button id="btnLogin" type="button" class="secondary">Login</button>
+      <button id="btnConnect" type="button">Connect WS</button>
+      <button id="btnDisconnect" type="button" class="secondary" disabled>Disconnect</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="actions" style="margin-bottom:10px">
+      <button id="btnWsLogin" type="button" disabled>Send Login</button>
+      <button id="btnHeartbeat" type="button" class="secondary" disabled>Heartbeat</button>
+    </div>
+    <label>Chat content</label>
+    <input id="chatText" value="hello from debug page" />
+    <div class="actions">
+      <button id="btnChat" type="button" disabled>Send Chat</button>
+      <button id="btnClear" type="button" class="secondary">Clear log</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <label>Log</label>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/protobufjs@7.4.0/dist/protobuf.min.js"></script>
+<script>
+  const MSG = {
+    LOGIN_REQ: 1001,
+    LOGIN_RESP: 1002,
+    HEARTBEAT_REQ: 1003,
+    HEARTBEAT_RESP: 1004,
+    CHAT_REQ: 1005,
+    CHAT_MSG: 1006,
+  };
+
+  const protoRoot = protobuf.Root.fromJSON({
+    nested: {
+      LoginRequest: { fields: { token: { type: "string", id: 1 } } },
+      LoginResponse: {
+        fields: {
+          code: { type: "int32", id: 1 },
+          message: { type: "string", id: 2 },
+          player_id: { type: "int64", id: 3 },
+          nickname: { type: "string", id: 4 },
+        },
+      },
+      HeartbeatRequest: { fields: { client_time: { type: "int64", id: 1 } } },
+      HeartbeatResponse: { fields: { server_time: { type: "int64", id: 1 } } },
+      ChatRequest: { fields: { content: { type: "string", id: 1 } } },
+      ChatMessage: {
+        fields: {
+          player_id: { type: "int64", id: 1 },
+          nickname: { type: "string", id: 2 },
+          content: { type: "string", id: 3 },
+          timestamp: { type: "int64", id: 4 },
+        },
+      },
+    },
+  });
+
+  const T = {
+    LoginRequest: protoRoot.lookupType("LoginRequest"),
+    LoginResponse: protoRoot.lookupType("LoginResponse"),
+    HeartbeatRequest: protoRoot.lookupType("HeartbeatRequest"),
+    HeartbeatResponse: protoRoot.lookupType("HeartbeatResponse"),
+    ChatRequest: protoRoot.lookupType("ChatRequest"),
+    ChatMessage: protoRoot.lookupType("ChatMessage"),
+  };
+
+  const els = {
+    httpBase: document.getElementById("httpBase"),
+    wsUrl: document.getElementById("wsUrl"),
+    username: document.getElementById("username"),
+    password: document.getElementById("password"),
+    token: document.getElementById("token"),
+    chatText: document.getElementById("chatText"),
+    log: document.getElementById("log"),
+    btnRegister: document.getElementById("btnRegister"),
+    btnLogin: document.getElementById("btnLogin"),
+    btnConnect: document.getElementById("btnConnect"),
+    btnDisconnect: document.getElementById("btnDisconnect"),
+    btnWsLogin: document.getElementById("btnWsLogin"),
+    btnHeartbeat: document.getElementById("btnHeartbeat"),
+    btnChat: document.getElementById("btnChat"),
+    btnClear: document.getElementById("btnClear"),
+  };
+
+  let socket = null;
+
+  function defaultHttpBase() {
+    return location.origin;
+  }
+  function defaultWsUrl() {
+    const host = location.hostname || "127.0.0.1";
+    return `ws://${host}:9001/ws`;
+  }
+
+  els.httpBase.value = defaultHttpBase();
+  els.wsUrl.value = defaultWsUrl();
+
+  function log(msg, cls) {
+    const line = document.createElement("div");
+    if (cls) line.className = cls;
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    els.log.appendChild(line);
+    els.log.scrollTop = els.log.scrollHeight;
+  }
+
+  function setConnected(connected) {
+    els.btnConnect.disabled = connected;
+    els.btnDisconnect.disabled = !connected;
+    els.btnWsLogin.disabled = !connected;
+    els.btnHeartbeat.disabled = !connected;
+    els.btnChat.disabled = !connected;
+  }
+
+  function encodePacket(msgId, payloadBytes) {
+    const body = payloadBytes || new Uint8Array(0);
+    const buf = new ArrayBuffer(4 + 2 + body.length);
+    const view = new DataView(buf);
+    view.setInt32(0, 2 + body.length);
+    view.setInt16(4, msgId);
+    new Uint8Array(buf, 6).set(body);
+    return buf;
+  }
+
+  function decodePacket(arrayBuffer) {
+    const view = new DataView(arrayBuffer);
+    if (view.byteLength < 6) throw new Error("frame too short");
+    const length = view.getInt32(0);
+    const msgId = view.getInt16(4);
+    const payload = new Uint8Array(arrayBuffer, 6, length - 2);
+    return { msgId, payload };
+  }
+
+  async function auth(path) {
+    const res = await fetch(`${els.httpBase.value.replace(/\/$/, "")}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: els.username.value.trim(),
+        password: els.password.value,
+        nickname: els.username.value.trim(),
+      }),
+    });
+    const json = await res.json();
+    if (json.code !== 0) throw new Error(json.message || "auth failed");
+    els.token.value = json.data.token;
+    log(`${path} ok, player=${json.data.user.id} nick=${json.data.user.nickname}`, "ok");
+  }
+
+  els.btnRegister.onclick = async () => {
+    try { await auth("/api/auth/register"); }
+    catch (e) { log(String(e.message || e), "err"); }
+  };
+  els.btnLogin.onclick = async () => {
+    try { await auth("/api/auth/login"); }
+    catch (e) { log(String(e.message || e), "err"); }
+  };
+
+  els.btnConnect.onclick = () => {
+    if (socket) return;
+    const url = els.wsUrl.value.trim();
+    socket = new WebSocket(url);
+    socket.binaryType = "arraybuffer";
+    socket.onopen = () => {
+      setConnected(true);
+      log(`WS connected ${url}`, "ok");
+    };
+    socket.onclose = () => {
+      setConnected(false);
+      socket = null;
+      log("WS closed", "meta");
+    };
+    socket.onerror = () => log("WS error", "err");
+    socket.onmessage = (ev) => {
+      try {
+        const { msgId, payload } = decodePacket(ev.data);
+        if (msgId === MSG.LOGIN_RESP) {
+          const m = T.LoginResponse.decode(payload);
+          log(`LOGIN_RESP code=${m.code} msg=${m.message} player=${m.player_id} nick=${m.nickname}`,
+            m.code === 0 ? "ok" : "err");
+        } else if (msgId === MSG.HEARTBEAT_RESP) {
+          const m = T.HeartbeatResponse.decode(payload);
+          log(`HEARTBEAT_RESP serverTime=${m.server_time}`, "ok");
+        } else if (msgId === MSG.CHAT_MSG) {
+          const m = T.ChatMessage.decode(payload);
+          log(`CHAT_MSG ${m.nickname}: ${m.content}`, "ok");
+        } else {
+          log(`recv msgId=${msgId} bytes=${payload.length}`, "meta");
+        }
+      } catch (e) {
+        log(`decode failed: ${e.message || e}`, "err");
+      }
+    };
+  };
+
+  els.btnDisconnect.onclick = () => {
+    if (socket) socket.close();
+  };
+
+  function send(msgId, type, fields) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      log("WS not connected", "err");
+      return;
+    }
+    const err = type.verify(fields);
+    if (err) {
+      log(err, "err");
+      return;
+    }
+    const payload = type.encode(type.create(fields)).finish();
+    socket.send(encodePacket(msgId, payload));
+    log(`sent msgId=${msgId}`, "meta");
+  }
+
+  els.btnWsLogin.onclick = () => {
+    const token = els.token.value.trim();
+    if (!token) {
+      log("token is empty", "err");
+      return;
+    }
+    send(MSG.LOGIN_REQ, T.LoginRequest, { token });
+  };
+  els.btnHeartbeat.onclick = () => {
+    send(MSG.HEARTBEAT_REQ, T.HeartbeatRequest, { client_time: Date.now() });
+  };
+  els.btnChat.onclick = () => {
+    send(MSG.CHAT_REQ, T.ChatRequest, { content: els.chatText.value });
+  };
+  els.btnClear.onclick = () => { els.log.innerHTML = ""; };
+</script>
+</body>
+</html>

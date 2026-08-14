@@ -1,7 +1,11 @@
 package com.cheng.game.network.session;
 
+import com.cheng.game.common.error.ErrorCode;
 import com.cheng.game.network.codec.GamePacket;
+import com.cheng.game.network.codec.SystemNotifies;
+import com.cheng.game.protocol.NotifyReason;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.util.AttributeKey;
@@ -12,6 +16,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Component
 public class SessionManager {
@@ -21,13 +26,20 @@ public class SessionManager {
 
     private final Map<Long, PlayerSession> playerSessions = new ConcurrentHashMap<>();
     private final ChannelGroup allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
+    private final ChannelGroup connectedChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
+    private final AtomicLong kickCount = new AtomicLong();
+
+    public void track(Channel channel) {
+        connectedChannels.add(channel);
+    }
 
     public void bind(Long playerId, String nickname, Channel channel) {
         Channel previous = Optional.ofNullable(playerSessions.get(playerId))
                 .map(PlayerSession::getChannel)
                 .orElse(null);
         if (previous != null && previous != channel && previous.isActive()) {
-            previous.close();
+            previous.writeAndFlush(SystemNotifies.of(ErrorCode.REPLACED, NotifyReason.REPLACED))
+                    .addListener(ChannelFutureListener.CLOSE);
         }
         channel.attr(PLAYER_ID).set(playerId);
         channel.attr(NICKNAME).set(nickname);
@@ -44,6 +56,7 @@ public class SessionManager {
             }
         }
         allChannels.remove(channel);
+        connectedChannels.remove(channel);
     }
 
     public Optional<PlayerSession> get(Long playerId) {
@@ -58,12 +71,27 @@ public class SessionManager {
         return playerSessions.size();
     }
 
+    public int connectionCount() {
+        return connectedChannels.size();
+    }
+
+    public long kickCount() {
+        return kickCount.get();
+    }
+
     public boolean kick(Long playerId) {
         PlayerSession session = playerSessions.remove(playerId);
         if (session == null) {
             return false;
         }
-        session.getChannel().close();
+        kickCount.incrementAndGet();
+        Channel channel = session.getChannel();
+        if (channel.isActive()) {
+            channel.writeAndFlush(SystemNotifies.of(ErrorCode.KICKED, NotifyReason.KICKED))
+                    .addListener(ChannelFutureListener.CLOSE);
+        } else {
+            channel.close();
+        }
         return true;
     }
 

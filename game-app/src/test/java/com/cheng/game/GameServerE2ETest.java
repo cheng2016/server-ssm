@@ -8,6 +8,7 @@ import com.cheng.game.support.TcpGameClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -19,6 +20,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -32,7 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
+@EnabledIf(value = "dockerIsAvailable", disabledReason = "Docker is required for e2e; local runs without Docker skip")
 class GameServerE2ETest {
 
     private static final int TCP_PORT = FreePorts.next();
@@ -120,11 +123,42 @@ class GameServerE2ETest {
     }
 
     @Test
+    void opsRejectsMissingTokenWith403() throws Exception {
+        ResponseEntity<String> missing = restTemplate.getForEntity(
+                "http://localhost:" + httpPort + "/api/ops/online", String.class);
+        assertEquals(403, missing.getStatusCode().value());
+        JsonNode body = objectMapper.readTree(missing.getBody());
+        assertEquals(403, body.path("code").asInt());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Ops-Token", "wrong-token");
+        ResponseEntity<String> wrong = restTemplate.exchange(
+                "http://localhost:" + httpPort + "/api/ops/online",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                String.class);
+        assertEquals(403, wrong.getStatusCode().value());
+    }
+
+    @Test
     void debugPageIsPublic() {
         ResponseEntity<String> page = restTemplate.getForEntity(
                 "http://localhost:" + httpPort + "/debug.html", String.class);
         assertTrue(page.getStatusCode().is2xxSuccessful());
         assertTrue(page.getBody() != null && page.getBody().contains("WebSocket Debug"));
+    }
+
+    static boolean dockerIsAvailable() {
+        boolean docker = DockerClientFactory.instance().isDockerAvailable();
+        if (!docker && e2eRequired()) {
+            throw new IllegalStateException("CI requires Docker so GameServerE2ETest can run");
+        }
+        return docker;
+    }
+
+    private static boolean e2eRequired() {
+        return "true".equalsIgnoreCase(System.getenv("GAME_E2E_REQUIRED"))
+                || "true".equalsIgnoreCase(System.getenv("CI"));
     }
 
     private JsonNode postJson(String path, Map<String, Object> body) throws Exception {

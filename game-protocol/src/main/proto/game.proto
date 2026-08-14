@@ -33,3 +33,27 @@ message ChatMessage {
   string content = 3;
   int64 timestamp = 4;
 }
+
+enum NotifyReason {
+  NOTIFY_UNSPECIFIED = 0;
+  RATE_LIMIT = 1;
+  BAD_CONTENT = 2;
+  KICKED = 3;
+  REPLACED = 4;
+  BUSY = 5;
+}
+
+message SystemNotify {
+  int32 code = 1;
+  string message = 2;
+  NotifyReason reason = 3;
+}
+
+message TokenRefreshRequest {
+}
+
+message TokenRefreshResponse {
+  int32 code = 1;
+  string message = 2;
+  string token = 3;
+}

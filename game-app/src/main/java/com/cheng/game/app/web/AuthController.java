@@ -37,6 +37,13 @@ public class AuthController {
         return ApiResponse.ok(userAuthService.login(request));
     }
 
+    @PostMapping("/refresh")
+    @Operation(summary = "Refresh JWT while the current token is still valid")
+    public ApiResponse<AuthDtos.AuthResponse> refresh(Authentication authentication) {
+        JwtService.TokenPayload payload = (JwtService.TokenPayload) authentication.getPrincipal();
+        return ApiResponse.ok(userAuthService.refresh(payload));
+    }
+
     @GetMapping("/me")
     @Operation(summary = "Current user profile")
     public ApiResponse<AuthDtos.UserView> me(Authentication authentication) {

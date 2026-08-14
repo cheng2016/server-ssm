@@ -12,6 +12,9 @@ public final class MsgIds {
     public static final short HEARTBEAT_RESP = 1004;
     public static final short CHAT_REQ = 1005;
     public static final short CHAT_MSG = 1006;
+    public static final short SYSTEM_NOTIFY = 1007;
+    public static final short TOKEN_REFRESH_REQ = 1008;
+    public static final short TOKEN_REFRESH_RESP = 1009;
 
     private MsgIds() {
     }

@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: game-server
+  profiles:
+    default: dev
   threads:
     virtual:
       enabled: true
@@ -32,7 +34,13 @@ management:
         include: health,info,metrics
   endpoint:
     health:
-      show-details: when_authorized
+      probes:
+        enabled: true
+  health:
+    db:
+      enabled: true
+    redis:
+      enabled: true
 
 springdoc:
   api-docs:
@@ -47,14 +55,22 @@ game:
     websocket-port: ${GAME_WS_PORT:9001}
     websocket-path: /ws
     reader-idle-seconds: 90
+    business-threads: 8
+    business-queue-capacity: 1024
+    rate-limit-window-seconds: 1
+    heartbeat-limit-per-window: 5
+    chat-limit-per-window: 3
+    login-limit-per-window: 10
+    login-window-seconds: 60
+  protect:
+    chat-max-length: 128
+    sensitive-words:
+      - 赌博
+      - 诈骗
   security:
-    jwt-secret: ${JWT_SECRET:change-me-to-a-very-long-secret-key-32bytes!}
     jwt-expire-seconds: 86400
-    ops-token: ${OPS_TOKEN:dev-ops-token}
 
 logging:
   level:
     root: INFO
     com.cheng.game: INFO
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

@@ -114,6 +114,7 @@
     <div class="actions">
       <button id="btnRegister" type="button">Register</button>
       <button id="btnLogin" type="button" class="secondary">Login</button>
+      <button id="btnRefresh" type="button" class="secondary">Refresh JWT</button>
       <button id="btnConnect" type="button">Connect WS</button>
       <button id="btnDisconnect" type="button" class="secondary" disabled>Disconnect</button>
     </div>
@@ -123,6 +124,7 @@
     <div class="actions" style="margin-bottom:10px">
       <button id="btnWsLogin" type="button" disabled>Send Login</button>
       <button id="btnHeartbeat" type="button" class="secondary" disabled>Heartbeat</button>
+      <button id="btnWsRefresh" type="button" class="secondary" disabled>Refresh Token</button>
     </div>
     <label>Chat content</label>
     <input id="chatText" value="hello from debug page" />
@@ -147,6 +149,9 @@
     HEARTBEAT_RESP: 1004,
     CHAT_REQ: 1005,
     CHAT_MSG: 1006,
+    SYSTEM_NOTIFY: 1007,
+    TOKEN_REFRESH_REQ: 1008,
+    TOKEN_REFRESH_RESP: 1009,
   };
 
   const protoRoot = protobuf.Root.fromJSON({
@@ -171,6 +176,21 @@
           timestamp: { type: "int64", id: 4 },
         },
       },
+      SystemNotify: {
+        fields: {
+          code: { type: "int32", id: 1 },
+          message: { type: "string", id: 2 },
+          reason: { type: "int32", id: 3 },
+        },
+      },
+      TokenRefreshRequest: { fields: {} },
+      TokenRefreshResponse: {
+        fields: {
+          code: { type: "int32", id: 1 },
+          message: { type: "string", id: 2 },
+          token: { type: "string", id: 3 },
+        },
+      },
     },
   });
 
@@ -181,6 +201,9 @@
     HeartbeatResponse: protoRoot.lookupType("HeartbeatResponse"),
     ChatRequest: protoRoot.lookupType("ChatRequest"),
     ChatMessage: protoRoot.lookupType("ChatMessage"),
+    SystemNotify: protoRoot.lookupType("SystemNotify"),
+    TokenRefreshRequest: protoRoot.lookupType("TokenRefreshRequest"),
+    TokenRefreshResponse: protoRoot.lookupType("TokenRefreshResponse"),
   };
 
   const els = {
@@ -193,10 +216,12 @@
     log: document.getElementById("log"),
     btnRegister: document.getElementById("btnRegister"),
     btnLogin: document.getElementById("btnLogin"),
+    btnRefresh: document.getElementById("btnRefresh"),
     btnConnect: document.getElementById("btnConnect"),
     btnDisconnect: document.getElementById("btnDisconnect"),
     btnWsLogin: document.getElementById("btnWsLogin"),
     btnHeartbeat: document.getElementById("btnHeartbeat"),
+    btnWsRefresh: document.getElementById("btnWsRefresh"),
     btnChat: document.getElementById("btnChat"),
     btnClear: document.getElementById("btnClear"),
   };
@@ -227,6 +252,7 @@
     els.btnDisconnect.disabled = !connected;
     els.btnWsLogin.disabled = !connected;
     els.btnHeartbeat.disabled = !connected;
+    els.btnWsRefresh.disabled = !connected;
     els.btnChat.disabled = !connected;
   }
 
@@ -273,6 +299,20 @@
     try { await auth("/api/auth/login"); }
     catch (e) { log(String(e.message || e), "err"); }
   };
+  els.btnRefresh.onclick = async () => {
+    try {
+      const token = els.token.value.trim();
+      if (!token) throw new Error("token is empty");
+      const res = await fetch(`${els.httpBase.value.replace(/\/$/, "")}/api/auth/refresh`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.code !== 0) throw new Error(json.message || "refresh failed");
+      els.token.value = json.data.token;
+      log("HTTP refresh ok", "ok");
+    } catch (e) { log(String(e.message || e), "err"); }
+  };
 
   els.btnConnect.onclick = () => {
     if (socket) return;
@@ -302,6 +342,13 @@
         } else if (msgId === MSG.CHAT_MSG) {
           const m = T.ChatMessage.decode(payload);
           log(`CHAT_MSG ${m.nickname}: ${m.content}`, "ok");
+        } else if (msgId === MSG.SYSTEM_NOTIFY) {
+          const m = T.SystemNotify.decode(payload);
+          log(`SYSTEM_NOTIFY code=${m.code} reason=${m.reason} msg=${m.message}`, "err");
+        } else if (msgId === MSG.TOKEN_REFRESH_RESP) {
+          const m = T.TokenRefreshResponse.decode(payload);
+          if (m.code === 0 && m.token) els.token.value = m.token;
+          log(`TOKEN_REFRESH_RESP code=${m.code} msg=${m.message}`, m.code === 0 ? "ok" : "err");
         } else {
           log(`recv msgId=${msgId} bytes=${payload.length}`, "meta");
         }
@@ -340,6 +387,9 @@
   };
   els.btnHeartbeat.onclick = () => {
     send(MSG.HEARTBEAT_REQ, T.HeartbeatRequest, { client_time: Date.now() });
+  };
+  els.btnWsRefresh.onclick = () => {
+    send(MSG.TOKEN_REFRESH_REQ, T.TokenRefreshRequest, {});
   };
   els.btnChat.onclick = () => {
     send(MSG.CHAT_REQ, T.ChatRequest, { content: els.chatText.value });

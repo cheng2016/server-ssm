@@ -96,6 +96,22 @@ public class NettyServerLifecycle implements SmartLifecycle {
         }
     }
 
+    public boolean isTcpBound() {
+        return tcpChannel != null && tcpChannel.isActive();
+    }
+
+    public boolean isWebsocketBound() {
+        return wsChannel != null && wsChannel.isActive();
+    }
+
+    public int tcpPort() {
+        return properties.getTcpPort();
+    }
+
+    public int websocketPort() {
+        return properties.getWebsocketPort();
+    }
+
     @Override
     public boolean isRunning() {
         return running;

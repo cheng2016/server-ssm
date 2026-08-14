@@ -1,0 +1,18 @@
+logging:
+  structured:
+    format:
+      console: logstash
+  level:
+    root: INFO
+    com.cheng.game: INFO
+
+management:
+  endpoint:
+    health:
+      show-details: when_authorized
+
+game:
+  security:
+    jwt-secret: ${JWT_SECRET}
+    jwt-expire-seconds: 7200
+    ops-token: ${OPS_TOKEN}

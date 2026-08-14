@@ -10,7 +10,12 @@ public enum ErrorCode {
     INTERNAL(500, "internal error"),
     INVALID_TOKEN(1001, "invalid token"),
     PLAYER_OFFLINE(1002, "player offline"),
-    LOGIN_FAILED(1003, "login failed");
+    LOGIN_FAILED(1003, "login failed"),
+    RATE_LIMITED(1004, "too many requests"),
+    BAD_CONTENT(1005, "invalid chat content"),
+    KICKED(1006, "kicked"),
+    REPLACED(1007, "logged in elsewhere"),
+    BUSY(1008, "server busy");
 
     private final int code;
     private final String message;

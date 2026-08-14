@@ -1,9 +1,11 @@
 package com.cheng.game.app.security;
 
+import com.cheng.game.common.log.LogMdc;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -36,6 +38,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         null,
                         List.of(new SimpleGrantedAuthority("ROLE_USER")));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                MDC.put(LogMdc.PLAYER_ID, String.valueOf(payload.userId()));
             } catch (Exception ignored) {
                 SecurityContextHolder.clearContext();
             }

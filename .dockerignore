@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.vscode
+target
+**/target
+docs
+*.md
+.env
+.env.example
+scripts
+local.properties

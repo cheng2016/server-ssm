@@ -33,6 +33,7 @@ public class GameServerHandler extends SimpleChannelInboundHandler<GamePacket> {
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
+        sessionManager.track(ctx.channel());
         log.info("Channel active: {}", ctx.channel().remoteAddress());
     }
 

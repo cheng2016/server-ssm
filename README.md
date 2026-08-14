@@ -69,6 +69,9 @@ length = 2 + 内容长度
 | 1004 | HeartbeatResponse | 服务器 → 客户端 | 回服务器时间 |
 | 1005 | ChatRequest | 客户端 → 服务器 | 发一句聊天 |
 | 1006 | ChatMessage | 服务器 → 全员 | 广播聊天 |
+| 1007 | SystemNotify | 服务器 → 客户端 | 限流 / 踢人 / 顶号 / 内容拦截 |
+| 1008 | TokenRefreshRequest | 客户端 → 服务器 | 长连接续期 JWT |
+| 1009 | TokenRefreshResponse | 服务器 → 客户端 | 新 token |
 
 协议定义在 [`game-protocol/src/main/proto/game.proto`](game-protocol/src/main/proto/game.proto)，消息号在 [`MsgIds`](game-common/src/main/java/com/cheng/game/common/protocol/MsgIds.java)。
 
@@ -96,7 +99,7 @@ HTTP 登录成功后下发 JWT。客户端连上 TCP/WS 后，发 `LoginRequest.
 ⑤ 之后的心跳、聊天都认这条连接上的玩家
 ```
 
-**重点**：长连接本身不认「Cookie 会话」。身份必须显式绑定；顶号时关掉旧 Channel。运营踢人走 HTTP，最终还是关的这条连接。
+**重点**：长连接本身不认「Cookie 会话」。身份必须显式绑定。同一账号再次登录会先给旧连接推 `SYSTEM_NOTIFY(REPLACED)` 再断开（顶号）。运营踢人先推 `KICKED` 再关连接。Token 可在过期前续期：`POST /api/auth/refresh` 或长连接 `TOKEN_REFRESH_REQ`。
 
 ### 第 5 步：用 Netty 接住长连接
 
@@ -108,7 +111,7 @@ HTTP 登录成功后下发 JWT。客户端连上 TCP/WS 后，发 `LoginRequest.
 
 TCP 和 WebSocket **共用同一套 Handler**，浏览器和游戏客户端走同一协议。
 
-**重点**：Netty 的 I/O 线程不要做重活；空闲超时用 `IdleStateHandler`；连接断开要解绑会话，并同步 Redis 在线集合。
+**重点**：拆包在 I/O 线程，业务丢到有界队列的 `GameBusinessExecutor`，避免堵死 Netty。空闲超时用 `IdleStateHandler`；连接断开要解绑会话，并同步 Redis 在线集合。心跳/聊天按 IP 和玩家限流，聊天还有长度和敏感词校验。指标走 Actuator：`game.online.players`、`game.connections`、`game.messages.received`（看 QPS）、`game.kicks`。
 
 ### 第 6 步：用注解写游戏逻辑（像写 Controller）
 
@@ -119,10 +122,10 @@ TCP 和 WebSocket **共用同一套 Handler**，浏览器和游戏客户端走�
 public class GameMessageHandlers {
 
     @GameHandler(msgId = MsgIds.LOGIN_REQ)
-    public GamePacket login(ChannelHandlerContext ctx, byte[] payload) { ... }
+    public GamePacket login(ChannelHandlerContext ctx, LoginRequest request) { ... }
 
     @GameHandler(msgId = MsgIds.CHAT_REQ)
-    public GamePacket chat(ChannelHandlerContext ctx, byte[] payload) { ... }
+    public GamePacket chat(ChannelHandlerContext ctx, ChatRequest request) { ... }
 }
 ```
 
@@ -138,7 +141,7 @@ public class GameMessageHandlers {
 - `POST /api/ops/kick/{playerId}` 踢人
 - `POST /api/ops/broadcast` 全服广播
 
-请求头：`X-Ops-Token`（开发默认 `dev-ops-token`）。
+请求头：`X-Ops-Token`（开发默认 `dev-ops-token`）。缺头或口令不对会直接 **403**，不会进业务方法。生产环境禁止使用默认口令。
 
 **重点**：后台常把「玩家协议」和「运营接口」分开。前者追求低延迟，后者追求可审计、好调用。
 
@@ -148,15 +151,17 @@ public class GameMessageHandlers {
 
 | 能力 | 位置 | 解决什么问题 |
 |------|------|----------------|
-| 配置外置 | `.env.example`、`application.yml` | 换环境不改代码 |
+| 配置外置 | `application-dev.yml` / `application-prod.yml` | 开发有默认值，生产禁止弱密钥 |
+| 结构化日志 | `traceId` / `playerId` MDC | 一条请求能串起来查 |
 | 一键依赖 | `docker-compose.yml` | MySQL / Redis / 应用一起起 |
 | 文档接口 | `/swagger-ui.html` | HTTP 不用猜字段 |
 | 浏览器调试 | `/debug.html` | 不用先写客户端也能测 WS |
+| 健康检查 | `/actuator/health` | DB / Redis / Netty 端口是否 bind |
 | 构建包装 | `./mvnw` | 不要求本机预装 Maven |
 | 回归 | `GameServerE2ETest` | 注册 → 登录 → TCP 聊天 |
-| CI | `.github/workflows/ci.yml` | 推代码自动编译测试 |
+| CI | `.github/workflows/ci.yml` | `./mvnw verify`（含 Testcontainers e2e）+ 镜像构建，可选 Codecov |
 
-**重点**：能演示、能回归，脚手架才有人敢用。健康检查看 `/actuator/health`。
+**重点**：能演示、能回归，脚手架才有人敢用。生产请用 `--spring.profiles.active=prod`，并设置足够长的 `JWT_SECRET` / `OPS_TOKEN`。
 
 ---
 
@@ -177,12 +182,35 @@ docker compose up -d --build
 
 调试页路径：注册 / 登录 → Connect WS → Send Login → Heartbeat / Chat。
 
+一键演示（服务起来之后）：
+
+```bash
+# Windows
+powershell -File scripts/demo.ps1
+
+# Linux / macOS
+bash scripts/demo.sh
+```
+
+脚本会打健康检查、注册/登录 `alice`、拉在线列表，并打印 Swagger / 调试页地址。
+
+### 界面示意
+
+Swagger 文档（[打开](http://localhost:8080/swagger-ui.html)）：
+
+![Swagger UI](docs/screenshots/swagger-ui.png)
+
+运营在线人数（`GET /api/ops/online`）：
+
+![在线人数](docs/screenshots/ops-online.png)
+
 只用本机跑应用时：
 
 ```bash
 docker compose up -d mysql redis
 cp .env.example .env
 ./mvnw -pl game-app -am spring-boot:run
+# 生产示例：SPRING_PROFILES_ACTIVE=prod JWT_SECRET=... OPS_TOKEN=...
 ```
 
 测试（需要 Docker，会起 MySQL / Redis 容器）：

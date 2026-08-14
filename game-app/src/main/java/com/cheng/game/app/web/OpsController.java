@@ -1,6 +1,5 @@
 package com.cheng.game.app.web;
 
-import com.cheng.game.app.config.AppProperties;
 import com.cheng.game.app.service.UserAuthService;
 import com.cheng.game.common.api.ApiResponse;
 import com.cheng.game.common.error.BusinessException;
@@ -17,7 +16,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,20 +28,15 @@ public class OpsController {
 
     private final SessionManager sessionManager;
     private final UserAuthService userAuthService;
-    private final AppProperties appProperties;
 
-    public OpsController(SessionManager sessionManager,
-                         UserAuthService userAuthService,
-                         AppProperties appProperties) {
+    public OpsController(SessionManager sessionManager, UserAuthService userAuthService) {
         this.sessionManager = sessionManager;
         this.userAuthService = userAuthService;
-        this.appProperties = appProperties;
     }
 
     @GetMapping("/online")
     @Operation(summary = "Online player count and list")
-    public ApiResponse<OnlineView> online(@RequestHeader(value = "X-Ops-Token", required = false) String opsToken) {
-        assertOps(opsToken);
+    public ApiResponse<OnlineView> online() {
         List<OnlinePlayer> players = sessionManager.allSessions().stream()
                 .map(s -> new OnlinePlayer(s.getPlayerId(), s.getNickname()))
                 .toList();
@@ -52,9 +45,7 @@ public class OpsController {
 
     @PostMapping("/kick/{playerId}")
     @Operation(summary = "Kick an online player")
-    public ApiResponse<Void> kick(@PathVariable Long playerId,
-                                  @RequestHeader(value = "X-Ops-Token", required = false) String opsToken) {
-        assertOps(opsToken);
+    public ApiResponse<Void> kick(@PathVariable Long playerId) {
         boolean kicked = sessionManager.kick(playerId);
         if (!kicked) {
             throw new BusinessException(ErrorCode.PLAYER_OFFLINE);
@@ -65,9 +56,7 @@ public class OpsController {
 
     @PostMapping("/broadcast")
     @Operation(summary = "Broadcast a system chat message to all online players")
-    public ApiResponse<Void> broadcast(@Valid @RequestBody BroadcastRequest request,
-                                       @RequestHeader(value = "X-Ops-Token", required = false) String opsToken) {
-        assertOps(opsToken);
+    public ApiResponse<Void> broadcast(@Valid @RequestBody BroadcastRequest request) {
         ChatMessage message = ChatMessage.newBuilder()
                 .setPlayerId(0)
                 .setNickname("system")
@@ -76,12 +65,6 @@ public class OpsController {
                 .build();
         sessionManager.broadcast(new GamePacket(MsgIds.CHAT_MSG, message.toByteArray()));
         return ApiResponse.ok();
-    }
-
-    private void assertOps(String opsToken) {
-        if (opsToken == null || !opsToken.equals(appProperties.getOpsToken())) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "invalid ops token");
-        }
     }
 
     public record OnlinePlayer(Long playerId, String nickname) {

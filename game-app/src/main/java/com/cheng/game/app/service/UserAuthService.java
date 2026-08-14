@@ -67,15 +67,28 @@ public class UserAuthService {
     }
 
     public AuthDtos.UserView getUser(Long id) {
-        UserEntity user = userMapper.selectById(id);
-        if (user == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "user not found");
-        }
-        return toView(user);
+        return toView(requireUser(id));
     }
 
     public JwtService.TokenPayload verifyGameToken(String token) {
         return jwtService.parse(token);
+    }
+
+    public AuthDtos.AuthResponse refresh(JwtService.TokenPayload payload) {
+        return toAuthResponse(requireUser(payload.userId()));
+    }
+
+    public String refreshToken(Long playerId) {
+        UserEntity user = requireUser(playerId);
+        return jwtService.createToken(user.getId(), user.getUsername(), user.getNickname());
+    }
+
+    private UserEntity requireUser(Long id) {
+        UserEntity user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "user not found");
+        }
+        return user;
     }
 
     public void markOnline(Long playerId) {

@@ -1,0 +1,15 @@
+logging:
+  level:
+    com.cheng.game: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} trace=%X{traceId} player=%X{playerId} - %msg%n"
+
+management:
+  endpoint:
+    health:
+      show-details: always
+
+game:
+  security:
+    jwt-secret: ${JWT_SECRET:change-me-to-a-very-long-secret-key-32bytes!}
+    ops-token: ${OPS_TOKEN:dev-ops-token}

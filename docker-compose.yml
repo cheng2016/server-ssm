@@ -46,6 +46,7 @@ services:
       MYSQL_PASSWORD: game
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      SPRING_PROFILES_ACTIVE: dev
       JWT_SECRET: change-me-to-a-very-long-secret-key-32bytes!
       OPS_TOKEN: dev-ops-token
       GAME_TCP_PORT: 9000
